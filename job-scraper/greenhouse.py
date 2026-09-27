@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 def get_jobs(company):
     url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
 
-    response = requests.get(url)
+    response = requests.get(url, params={"content": "true"})
 
     if response.status_code != 200:
         print(f"Error: {response.status_code}")

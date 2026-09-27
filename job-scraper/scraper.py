@@ -1,3 +1,5 @@
+from html import escape, unescape
+
 from greenhouse import get_jobs as greenhouse_jobs
 from lever import get_jobs as lever_jobs
 from ashby import get_jobs as ashby_jobs
@@ -7,6 +9,7 @@ def normalize_greenhouse(job, company):
     return {
         "company": company,
         "title": job["title"],
+        "description": unescape(job.get("content") or ""),
         "location": job["location"]["name"],
         "url": job["absolute_url"],
         "source": "greenhouse",
@@ -15,9 +18,20 @@ def normalize_greenhouse(job, company):
 
 
 def normalize_lever(job, company):
+    description_parts = [
+        job.get("opening", ""),
+        job.get("description") or job.get("descriptionBody") or job.get("descriptionPlain", ""),
+    ]
+    for section in job.get("lists") or []:
+        if section.get("text"):
+            description_parts.append(f"<h3>{escape(section['text'])}</h3>")
+        description_parts.append(section.get("content") or section.get("contentPlain", ""))
+    description_parts.append(job.get("additional") or job.get("additionalPlain", ""))
+
     return {
         "company": company,
         "title": job["text"],
+        "description": "\n".join(part for part in description_parts if part),
         "location": job["categories"].get("location", ""),
         "url": job["hostedUrl"],
         "source": "lever",
@@ -29,6 +43,7 @@ def normalize_ashby(job, company):
     return {
         "company": company,
         "title": job["title"],
+        "description": job.get("descriptionHtml") or job.get("descriptionPlain", ""),
         "location": job.get("location", ""),
         "url": job.get("jobUrl"),
         "source": "ashby",
