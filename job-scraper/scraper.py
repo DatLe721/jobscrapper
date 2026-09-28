@@ -3,7 +3,10 @@ from html import escape, unescape
 from greenhouse import get_jobs as greenhouse_jobs
 from lever import get_jobs as lever_jobs
 from ashby import get_jobs as ashby_jobs
-from database import create_database, save_job
+from database import create_database, job_exists, save_job
+from ai_evaluator import EvaluationError, evaluate_job, extract_resume_text
+import os
+import sys
 
 def normalize_greenhouse(job, company):
     return {
@@ -114,59 +117,60 @@ ashby_companies = [
     "zettabyte-space",
 ]
 
-new_jobs = []
-
-
-def process_jobs(jobs, company, normalize_job):
+def process_jobs(jobs, company, normalize_job, resume_text):
     for job in jobs:
         normalized = normalize_job(job, company)
 
         if not is_cs_internship(normalized):
             continue
 
-        # Only save_job's True result means this URL was inserted for the first time.
-        is_new = save_job(normalized)
+        if job_exists(normalized["url"]):
+            print(f"Duplicate skipped: {normalized['title']}")
+            continue
+
+        try:
+            evaluation = evaluate_job(normalized, resume_text)
+        except EvaluationError as error:
+            print(f"AI evaluation failed for {normalized['title']}: {error}")
+            continue
+
+        # Store the posting and its evaluation together, only after evaluation succeeds.
+        is_new = save_job(normalized, evaluation)
         if is_new:
-            new_jobs.append(normalized)
-            print(f"NEW: {company} - {normalized['title']}")
+            print(f"NEW JOB: {normalized['title']}")
+            print(f"AI Score: {evaluation['score']}\n")
         else:
-            print(f"DUPLICATE: {company} - {normalized['title']}")
-
-create_database()
-for company in greenhouse_companies:
-
-    print(f"Checking Greenhouse: {company}")
-
-    jobs = greenhouse_jobs(company)
-    process_jobs(jobs, company, normalize_greenhouse)
+            print(f"Duplicate skipped: {normalized['title']}")
 
 
-for company in lever_companies:
+def main():
+    create_database()
 
-    print(f"Checking Lever: {company}")
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        print("Error: ANTHROPIC_API_KEY is not set.", file=sys.stderr)
+        return 1
 
-    jobs = lever_jobs(company)
-    process_jobs(jobs, company, normalize_lever)
+    try:
+        resume_text = extract_resume_text()
+    except EvaluationError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
 
-for company in ashby_companies:
+    for company in greenhouse_companies:
+        print(f"Checking Greenhouse: {company}")
+        process_jobs(greenhouse_jobs(company), company, normalize_greenhouse, resume_text)
 
-    print(f"Checking Ashby: {company}")
+    for company in lever_companies:
+        print(f"Checking Lever: {company}")
+        process_jobs(lever_jobs(company), company, normalize_lever, resume_text)
 
-    jobs = ashby_jobs(company)
-    process_jobs(jobs, company, normalize_ashby)
+    for company in ashby_companies:
+        print(f"Checking Ashby: {company}")
+        process_jobs(ashby_jobs(company), company, normalize_ashby, resume_text)
 
-print("\nNEW JOBS")
-print("=" * 60)
+    return 0
 
-if not new_jobs:
-    print("No new matching jobs found.")
 
-for job in new_jobs:
-
-    print("COMPANY:", job["company"])
-    print("TITLE:", job["title"])
-    print("LOCATION:", job["location"])
-    print("SOURCE:", job["source"])
-    print("URL:", job["url"])
-    print("-" * 60)
+if __name__ == "__main__":
+    raise SystemExit(main())
 
