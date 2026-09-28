@@ -1,3 +1,4 @@
+import argparse
 from html import escape, unescape
 
 from greenhouse import get_jobs as greenhouse_jobs
@@ -117,7 +118,7 @@ ashby_companies = [
     "zettabyte-space",
 ]
 
-def process_jobs(jobs, company, normalize_job, resume_text):
+def process_jobs(jobs, company, normalize_job, resume_text=None, evaluate_with_ai=True):
     for job in jobs:
         normalized = normalize_job(job, company)
 
@@ -128,49 +129,79 @@ def process_jobs(jobs, company, normalize_job, resume_text):
             print(f"Duplicate skipped: {normalized['title']}")
             continue
 
-        try:
-            evaluation = evaluate_job(normalized, resume_text)
-        except EvaluationError as error:
-            print(f"AI evaluation failed for {normalized['title']}: {error}")
-            continue
+        if evaluate_with_ai:
+            try:
+                evaluation = evaluate_job(normalized, resume_text)
+            except EvaluationError as error:
+                print(f"AI evaluation failed for {normalized['title']}: {error}")
+                continue
+        else:
+            evaluation = None
 
-        # Store the posting and its evaluation together, only after evaluation succeeds.
         is_new = save_job(normalized, evaluation)
         if is_new:
             print(f"NEW JOB: {normalized['title']}")
-            print(f"AI Score: {evaluation['score']}\n")
+            if evaluation is not None:
+                print(f"AI Score: {evaluation['score']}\n")
         else:
             print(f"Duplicate skipped: {normalized['title']}")
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Scrape and save CS internship postings.")
+    parser.add_argument(
+        "--no-ai",
+        action="store_true",
+        help="Save filtered jobs to SQLite without evaluating them with the AI API.",
+    )
+    args = parser.parse_args(argv)
+
     create_database()
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY is not set.", file=sys.stderr)
-        return 1
+    resume_text = None
+    if not args.no_ai:
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            print("Error: ANTHROPIC_API_KEY is not set.", file=sys.stderr)
+            return 1
 
-    try:
-        resume_text = extract_resume_text()
-    except EvaluationError as error:
-        print(f"Error: {error}", file=sys.stderr)
-        return 1
+        try:
+            resume_text = extract_resume_text()
+        except EvaluationError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
 
     for company in greenhouse_companies:
         print(f"Checking Greenhouse: {company}")
-        process_jobs(greenhouse_jobs(company), company, normalize_greenhouse, resume_text)
+        process_jobs(
+            greenhouse_jobs(company),
+            company,
+            normalize_greenhouse,
+            resume_text,
+            evaluate_with_ai=not args.no_ai,
+        )
 
     for company in lever_companies:
         print(f"Checking Lever: {company}")
-        process_jobs(lever_jobs(company), company, normalize_lever, resume_text)
+        process_jobs(
+            lever_jobs(company),
+            company,
+            normalize_lever,
+            resume_text,
+            evaluate_with_ai=not args.no_ai,
+        )
 
     for company in ashby_companies:
         print(f"Checking Ashby: {company}")
-        process_jobs(ashby_jobs(company), company, normalize_ashby, resume_text)
+        process_jobs(
+            ashby_jobs(company),
+            company,
+            normalize_ashby,
+            resume_text,
+            evaluate_with_ai=not args.no_ai,
+        )
 
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
