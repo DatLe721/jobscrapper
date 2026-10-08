@@ -4,8 +4,15 @@ from html import escape, unescape
 from greenhouse import get_jobs as greenhouse_jobs
 from lever import get_jobs as lever_jobs
 from ashby import get_jobs as ashby_jobs
-from database import create_database, job_exists, save_job
+from database import (
+    create_database,
+    get_local_ai_evaluation,
+    job_exists,
+    save_ai_evaluation,
+    save_job,
+)
 from ai_evaluator import EvaluationError, evaluate_job, extract_resume_text
+from local_ai import LOCAL_AI_THRESHOLD, LocalAIError, evaluate_local_job
 import os
 import sys
 
@@ -63,10 +70,19 @@ def is_cs_internship(job):
         "internship"
     ]
 
+    junior_level_words = [
+        "junior",
+        "entry level",
+        "entry-level",
+        "new grad",
+        "new graduate",
+    ]
+
     cs_keywords = [
         "software",
         "computer science",
         "data science",
+        "data scientist",
         "machine learning",
         "artificial intelligence",
         "ai ",
@@ -80,13 +96,17 @@ def is_cs_internship(job):
         word in title
         for word in internship_words
     )
+    has_junior_level_role = any(
+        word in title
+        for word in junior_level_words
+    )
 
     has_cs_keyword = any(
         word in title
         for word in cs_keywords
     )
 
-    return has_internship and has_cs_keyword
+    return (has_internship or has_junior_level_role) and has_cs_keyword
 
 greenhouse_companies = [
     "stripe",
@@ -125,26 +145,60 @@ def process_jobs(jobs, company, normalize_job, resume_text=None, evaluate_with_a
         if not is_cs_internship(normalized):
             continue
 
-        if job_exists(normalized["url"]):
-            print(f"Duplicate skipped: {normalized['title']}")
+        if not evaluate_with_ai:
+            if job_exists(normalized["url"]):
+                print(f"Duplicate skipped: {normalized['title']}")
+                continue
+            if save_job(normalized):
+                print(f"NEW JOB: {normalized['title']}")
             continue
 
-        if evaluate_with_ai:
-            try:
-                evaluation = evaluate_job(normalized, resume_text)
-            except EvaluationError as error:
-                print(f"AI evaluation failed for {normalized['title']}: {error}")
+        local_evaluation = get_local_ai_evaluation(normalized["url"])
+        is_new = False
+        if local_evaluation is not None:
+            print("LOCAL AI: CACHED - SKIPPED")
+            if not local_evaluation["relevant"] or local_evaluation["score"] < LOCAL_AI_THRESHOLD:
+                print(
+                    f"LOCAL AI: SCORE {local_evaluation['score']} - SKIPPED PAID AI"
+                )
+                continue
+            if local_evaluation["ai_evaluated_at"] is not None:
+                print(f"Duplicate skipped: {normalized['title']}")
                 continue
         else:
-            evaluation = None
+            if job_exists(normalized["url"]):
+                print(f"Duplicate skipped: {normalized['title']}")
+                continue
 
-        is_new = save_job(normalized, evaluation)
+            print("LOCAL AI: RUNNING")
+            try:
+                local_evaluation = evaluate_local_job(normalized)
+            except LocalAIError as error:
+                print(f"LOCAL AI: FAILED for {normalized['title']}: {error}")
+                continue
+
+            is_new = save_job(normalized, local_evaluation=local_evaluation)
+            if (
+                not local_evaluation["relevant"]
+                or local_evaluation["score"] < LOCAL_AI_THRESHOLD
+            ):
+                print(
+                    f"LOCAL AI: SCORE {local_evaluation['score']} - SKIPPED PAID AI"
+                )
+                continue
+            print(f"LOCAL AI: SCORE {local_evaluation['score']} - PASSED")
+
+        print("ANTHROPIC AI: RUNNING")
+        try:
+            evaluation = evaluate_job(normalized, resume_text)
+        except EvaluationError as error:
+            print(f"AI evaluation failed for {normalized['title']}: {error}")
+            continue
+
+        save_ai_evaluation(normalized["url"], evaluation)
         if is_new:
             print(f"NEW JOB: {normalized['title']}")
-            if evaluation is not None:
-                print(f"AI Score: {evaluation['score']}\n")
-        else:
-            print(f"Duplicate skipped: {normalized['title']}")
+        print(f"AI Score: {evaluation['score']}\n")
 
 
 def main(argv=None):

@@ -35,7 +35,7 @@ RESULT_FIELDS = (
     "missing_requirements",
 )
 
-SYSTEM_PROMPT = """You evaluate job postings for a Computer Science student seeking internships.
+SYSTEM_PROMPT = """You evaluate job postings for a Computer Science student seeking internships and junior-level roles.
 Compare the candidate's resume against the actual job description, not just the title.
 Assess internship status; relevance to software engineering, data science, machine
 learning, artificial intelligence, programming, or another technical CS role; required
@@ -46,9 +46,10 @@ when it provides related or incomplete evidence. Only classify a requirement as 
 when it is explicitly mandatory and the resume clearly shows the candidate does not
 meet it. Do not treat an unmentioned skill or qualification as missing merely because
 it is absent from the resume. Preferred qualifications without resume evidence should
-generally be left out of missing_requirements. A role should match only when it is an
-internship (or clearly an equivalent student placement) and is meaningfully related to
-CS/technical work. Return one JSON object only, with exactly these fields: match
+generally be left out of missing_requirements. A role should match when it is meaningfully
+related to CS/technical work and is either an internship or equivalent student placement,
+or a genuine junior-level, entry-level, or new-graduate role. Do not classify mid-level or
+senior roles as a match. Return one JSON object only, with exactly these fields: match
 (boolean), score (integer from 0 to 100), reason (short string), matched_requirements,
 partial_matches, and missing_requirements (arrays of strings)."""
 

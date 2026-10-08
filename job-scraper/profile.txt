@@ -1,0 +1,10 @@
+Education: B.S. in Computer Science at California State University, Long Beach, expected May 2027; 3.75 GPA and Honors List. Relevant coursework includes data structures, algorithms, operating systems, and object-oriented programming.
+
+Skills: Python, C++, C, Java, JavaScript, HTML, React, Node.js, database design, REST APIs, Git, Linux, PowerShell, AWS, Pandas, NumPy, Matplotlib, GQL, Supabase, Webpack, and machine learning fundamentals.
+
+Projects:
+- Biomedical AI project: built a Python/Pandas data pipeline, prototyped a logistic-regression baseline and alert engine, and shipped a web application.
+- Full-stack forum: independently built a React/Node.js application with authentication, database-backed posts and comments, and CRUD features.
+- Hackathon document assistant: built a Flask API for PDF/image text extraction and integrated an AI summarization service.
+
+Career interests: software engineering, backend or full-stack development, data engineering, machine learning, and AI internships, co-ops, and junior/entry-level/new-graduate roles suitable for a Computer Science student.
